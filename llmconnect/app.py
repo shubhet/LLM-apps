@@ -1,49 +1,55 @@
 import os
 from dotenv import load_dotenv
 import streamlit as st
+from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.output_parsers import StrOutputParser
+from langchain_core.language_models.llms import LLM
 from huggingface_hub import InferenceClient
+from typing import Optional, List, Any
 
 load_dotenv()
-hf_token = os.getenv("HG_KEY") or os.getenv("HUGGINGFACEHUB_API_KEY")
 
-if not hf_token:
-    st.error("Token not found in .env file")
-    st.stop()
+HF_TOKEN = os.getenv("AH_KEY")
+os.environ["LANGCHAIN_TRACING_V2"] = "true"
 
-st.set_page_config(page_title="HF Chat Demo")
-st.title("🤖 Hugging Face Chat")
+class HFInferenceLLM(LLM):
+    model_id: str = "Qwen/Qwen2.5-72B-Instruct"  
+    hf_token: str = ""
+    max_new_tokens: int = 512
+    temperature: float = 0.7
 
-question = st.text_input("Ask a question")
+    def _call(self, prompt: str, stop: Optional[List[str]] = None, **kwargs: Any) -> str:
+        client = InferenceClient(
+            provider="novita",        
+            api_key=self.hf_token,
+        )
+        response = client.chat_completion(
+            model=self.model_id,
+            messages=[{"role": "user", "content": prompt}],
+            max_tokens=self.max_new_tokens,
+            temperature=self.temperature
+        )
+        return response.choices[0].message.content
 
-# Model:provider pairs to try in order
-MODELS = [
-    ("meta-llama/Llama-3.2-3B-Instruct", "auto"),
-    ("Qwen/Qwen2.5-72B-Instruct",         "nebius"),
-    ("Qwen/Qwen2.5-72B-Instruct",         "together"),
-    ("mistralai/Mistral-7B-Instruct-v0.3", "auto"),
-]
+    @property
+    def _llm_type(self) -> str:
+        return "huggingface_inference"
 
-if question:
-    with st.spinner("Generating response..."):
-        last_error = None
-        for model, provider in MODELS:
-            try:
-                client = InferenceClient(api_key=hf_token, provider=provider)
-                completion = client.chat.completions.create(
-                    model=model,
-                    messages=[
-                        {"role": "system", "content": "You are a helpful AI assistant."},
-                        {"role": "user",   "content": question}
-                    ],
-                    max_tokens=512,
-                    temperature=0.7,
-                )
-                response = completion.choices[0].message.content
-                st.success(f"Response *(model: {model} | provider: {provider})*")
-                st.write(response)
-                break
-            except Exception as e:
-                last_error = str(e)
-                continue
-        else:
-            st.error(f"All options failed. Last error: {last_error}")
+# Prompt
+prompt = ChatPromptTemplate.from_messages([
+    ("system", "You are a helpful assistant. Please respond to the question asked"),
+    ("user", "Question:{question}")
+])
+
+# Streamlit UI
+st.title("Langchain Demo With Qwen Model")
+input_text = st.chat_input("What question you have in mind?")
+
+# LLM
+llm = HFInferenceLLM(model_id="Qwen/Qwen2.5-72B-Instruct", hf_token=HF_TOKEN)
+output_parser = StrOutputParser()
+chain = prompt | llm | output_parser
+
+if input_text:
+    with st.spinner("Thinking..."):
+        st.write(chain.invoke({"question": input_text}))
