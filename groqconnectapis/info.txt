@@ -1,0 +1,23 @@
+LLM → Thinks and generates answers.
+LangChain → Organizes the AI workflow.
+LangServe → Makes LangChain available as an API.
+FastAPI → Creates the API endpoints.
+Uvicorn → Runs the application so users can access it.
+
+
+to open --
+http://127.0.0.1:8090/docs
+
+
+curl------------------
+
+curl -X 'POST' \
+  'http://127.0.0.1:8090/chain/invoke' \
+  -H 'accept: application/json' \
+  -H 'Content-Type: application/json' \
+  -d '{
+  "input": {
+    "language": "English",
+    "text": "how many countries are in the world"
+  }
+}'
